@@ -1,9 +1,16 @@
 [project]
-name = "voiceeval"
+name = "voiceeval-cli"
 version = "0.1.0"
 description = "Evaluation for voice agents. Catches the failures text evals cannot see: latency, mis-hearing, missing confirmation, barge-in."
 requires-python = ">=3.11"
+readme = "README.md"
+license = { file = "LICENSE" }
 dependencies = ["rich>=13.0"]
+
+[project.urls]
+Homepage = "https://github.com/AgentPostmortem/Voiceeval"
+Repository = "https://github.com/AgentPostmortem/Voiceeval"
+Issues = "https://github.com/AgentPostmortem/Voiceeval/issues"
 
 [project.optional-dependencies]
 stt = ["groq>=0.11"]

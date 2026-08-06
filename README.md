@@ -104,9 +104,18 @@ scripted test calls: in production this failure is silent, and no tool can fix t
 ## Install
 
 ```bash
+pip install voiceeval-cli
+voiceeval check fixtures/*.json
+```
+
+The distribution is `voiceeval-cli` (the bare name is taken on PyPI by an unrelated
+project); the import path and the command are both `voiceeval`.
+
+From a clone, for development:
+
+```bash
 pip install -e ".[dev]"
 pytest -q                                  # 18 tests
-voiceeval check fixtures/*.json
 ```
 
 Only dependency is `rich`. `[stt]` adds `groq` if you are starting from audio.
