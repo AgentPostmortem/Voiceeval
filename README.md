@@ -103,6 +103,8 @@ scripted test calls: in production this failure is silent, and no tool can fix t
 
 ## Install
 
+**PyPI:** https://pypi.org/project/voiceeval-cli/
+
 ```bash
 pip install voiceeval-cli
 voiceeval check fixtures/*.json
