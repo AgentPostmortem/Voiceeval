@@ -216,3 +216,75 @@ def test_from_dict_roundtrip():
     )
     assert inter.turns[0].speaker == "user"
     assert inter.policy == {}
+
+
+# --------------------------------------------------------------------------- locale packs
+
+
+def test_english_default_pack_matches_builtin_fixtures():
+    """Default English pack keeps fixture findings identical."""
+    inter = load(FIXTURES / "misheard_call.json")
+    assert inter.language == "en"
+    findings = analyse(inter)
+    assert any(f.check == "misheard_number" for f in findings)
+    assert "no_confirmation" in _codes(inter)
+
+
+def test_missing_locale_pack_is_not_a_silent_pass():
+    """A Hindi (or other unsupported) call must not report zero findings as success."""
+    inter = Interaction(
+        id="hi-call",
+        language="hi",
+        turns=[
+            _t("user", "pachas refund", 0, 2, truth="pandrah refund"),
+            _t("agent", "Done.", 2.2, 3.0, actions=[Action("refund", {"amount": 50}, True)]),
+        ],
+        policy={"max_refund": 50},
+    )
+    findings = analyse(inter)
+    assert any(f.check == "locale_unavailable" for f in findings)
+    assert score(inter).passed is False
+
+
+def test_suite_can_supply_custom_pack():
+    from voiceeval.locale import LocalePack
+
+    pack = LocalePack.from_dict(
+        {
+            "language": "xx",
+            "confusable_pairs": [["alpha", "beta"]],
+            "confirmation_phrases": ["please confirm"],
+        }
+    )
+    inter = Interaction(
+        id="custom",
+        language="xx",
+        turns=[
+            _t("user", "pay beta", 0, 2, truth="pay alpha"),
+            _t("agent", "Paying now.", 2.2, 3.0, actions=[Action("charge", {}, True)]),
+        ],
+    )
+    findings = analyse(inter, locale_pack=pack)
+    assert any(f.check == "misheard_number" for f in findings)
+    assert "no_confirmation" in {f.check for f in findings}
+    # confirmation phrase works when present
+    inter2 = Interaction(
+        id="custom2",
+        language="xx",
+        turns=[
+            _t("user", "pay beta", 0, 2, truth="pay beta"),
+            _t("agent", "please confirm beta", 2.2, 3.0),
+            _t("user", "yes", 3.1, 3.5, truth="yes"),
+            _t("agent", "ok", 3.6, 4.0, actions=[Action("charge", {}, True)]),
+        ],
+    )
+    assert "no_confirmation" not in {f.check for f in analyse(inter2, locale_pack=pack)}
+
+
+def test_spanish_pack_catches_misheard():
+    inter = load(FIXTURES / "es_misheard_call.json")
+    assert inter.language == "es"
+    findings = analyse(inter)
+    assert any(f.check == "misheard_number" for f in findings), findings
+    assert "no_confirmation" in _codes(inter)
+    assert score(inter).passed is False

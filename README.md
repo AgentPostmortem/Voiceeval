@@ -93,6 +93,37 @@ nobody uses.
 construction**. There is a test that documents exactly this limitation. That is the argument for
 scripted test calls: in production this failure is silent, and no tool can fix that for you.
 
+
+
+## Locale packs
+
+Mis-hearing and confirmation checks are language-sensitive. English ships as
+`voiceeval/locales/en.json`; Spanish is included as an example (`es.json`).
+
+- Default: calls with `"language": "en"` (or omitted) use the English pack.
+- Suites can load extra packs or pass a custom `LocalePack` into `analyse()`.
+- A call whose language has **no pack loaded** reports `locale_unavailable`
+  (high severity) for those checks — it is **not** counted as a pass.
+
+```json
+// fixtures/es_misheard_call.json
+{ "id": "...", "language": "es", "turns": [ ... ] }
+```
+
+```python
+from voiceeval.checks import analyse
+from voiceeval.locale import LocalePack, load_builtin_packs
+from voiceeval.turns import load
+
+inter = load("fixtures/es_misheard_call.json")
+packs = load_builtin_packs()
+# or: packs["es"] = LocalePack.from_path("my_es.json")
+findings = analyse(inter, packs=packs)
+```
+
+Edit `confusable_pairs` and `confirmation_phrases` in a pack JSON to cover domain
+STT traps (product names, amounts) without changing library code.
+
 ## Honest scope
 
 - **The eval logic is the project, and it is fully tested** (18 tests, no keys, no network).

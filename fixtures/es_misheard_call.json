@@ -1,0 +1,38 @@
+{
+  "id": "refund-misheard-cincuenta-es",
+  "language": "es",
+  "policy": {
+    "max_refund": 50
+  },
+  "completed": true,
+  "turns": [
+    {
+      "speaker": "agent",
+      "text": "Hola, en que puedo ayudarle?",
+      "start_s": 0.0,
+      "end_s": 1.5
+    },
+    {
+      "speaker": "user",
+      "text": "Necesito un reembolso de cincuenta dolares.",
+      "truth": "Necesito un reembolso de quince dolares.",
+      "start_s": 2.0,
+      "end_s": 5.0
+    },
+    {
+      "speaker": "agent",
+      "text": "De acuerdo, reembolso de cincuenta ahora.",
+      "start_s": 5.4,
+      "end_s": 7.2,
+      "actions": [
+        {
+          "name": "refund",
+          "args": {
+            "amount": 50
+          },
+          "consequential": true
+        }
+      ]
+    }
+  ]
+}

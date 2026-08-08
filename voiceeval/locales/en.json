@@ -1,0 +1,45 @@
+{
+  "language": "en",
+  "confusable_pairs": [
+    [
+      "fifteen",
+      "fifty"
+    ],
+    [
+      "sixteen",
+      "sixty"
+    ],
+    [
+      "seventeen",
+      "seventy"
+    ],
+    [
+      "eighteen",
+      "eighty"
+    ],
+    [
+      "nineteen",
+      "ninety"
+    ],
+    [
+      "thirteen",
+      "thirty"
+    ],
+    [
+      "fourteen",
+      "forty"
+    ]
+  ],
+  "confirmation_phrases": [
+    "just to confirm",
+    "confirm",
+    "did you say",
+    "is that right",
+    "correct\\?",
+    "to be clear",
+    "you'?d like",
+    "shall I",
+    "should I",
+    "can I go ahead"
+  ]
+}
