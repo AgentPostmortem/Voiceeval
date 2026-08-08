@@ -61,6 +61,9 @@ class Interaction:
     # hardcoding thresholds, because "what is allowed" is a business decision, not a library one.
     policy: dict = field(default_factory=dict)
     completed: bool = True  # did the call reach its goal, or did it just end
+    # BCP-47-ish language tag for locale-sensitive checks (misheard / confirmation).
+    # Defaults to English so existing fixtures keep their behaviour.
+    language: str = "en"
 
     def pairs(self) -> list[tuple[Turn, Turn]]:
         """(user turn, the agent turn that answered it). Where response latency lives."""
@@ -111,4 +114,5 @@ def from_dict(data: dict) -> Interaction:
         turns=turns,
         policy=data.get("policy", {}),
         completed=bool(data.get("completed", True)),
+        language=str(data.get("language", "en")).lower(),
     )

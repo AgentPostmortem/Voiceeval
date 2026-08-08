@@ -14,14 +14,29 @@ The five that matter, roughly in order of how much they cost:
    eventually arrives is perfect. Nobody notices this in a transcript.
 4. talking over the caller. Barge-in that the agent ignores makes it feel broken.
 5. dead air. Silence with nobody speaking is where callers hang up.
+
+Language-sensitive checks (misheard, confirmation) read a :class:`LocalePack`. English ships by
+default; suites can pass their own. A call whose language has no pack loaded reports that those
+checks did not run — it is not counted as a clean pass.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import Callable
 
+from .locale import LocalePack, load_builtin_packs, resolve_pack
 from .turns import Interaction, Turn
+
+# English number tokens used by misheard_number. Domain-specific number words belong in a
+# custom locale pack's confusable_pairs; this keeps the classic English STT trap working.
+_NUMERIC = re.compile(
+    r"\b\d+(?:\.\d+)?\b|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|"
+    r"eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|"
+    r"twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand)\b",
+    re.I,
+)
 
 
 @dataclass
@@ -32,35 +47,25 @@ class Finding:
     turn_index: int | None = None
 
 
-# Numbers that STT reliably confuses. The -teen/-ty pairs are the classic: one unstressed syllable
-# apart, and both are plausible amounts, so neither the model nor a human reviewer notices.
-_CONFUSABLE = [
-    (r"\bfifteen\b", r"\bfifty\b"),
-    (r"\bsixteen\b", r"\bsixty\b"),
-    (r"\bseventeen\b", r"\bseventy\b"),
-    (r"\beighteen\b", r"\beighty\b"),
-    (r"\bnineteen\b", r"\bninety\b"),
-    (r"\bthirteen\b", r"\bthirty\b"),
-    (r"\bfourteen\b", r"\bforty\b"),
-]
-
-_NUMERIC = re.compile(r"\b\d+(?:\.\d+)?\b|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|"
-                      r"eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|"
-                      r"twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand)\b", re.I)
-
-_CONFIRM = re.compile(
-    r"\b(?:just to confirm|confirm|did you say|is that right|correct\?|to be clear|"
-    r"you'?d like|shall I|should I|can I go ahead)\b",
-    re.I,
-)
-
-
-def check_misheard(inter: Interaction) -> list[Finding]:
+def check_misheard(inter: Interaction, pack: LocalePack | None = None) -> list[Finding]:
     """STT heard something different from what was said.
 
     Only detectable when you have ground truth, which is exactly why scripted test calls are worth
     the effort: in production this failure is silent by construction.
+
+    Requires a locale pack for ``inter.language``. Without one the check reports that it did not
+    run (high severity) instead of returning an empty list that looks like a pass.
     """
+    if pack is None:
+        return [
+            Finding(
+                "locale_unavailable",
+                "high",
+                f"No locale pack for language {inter.language!r}; misheard check did not run. "
+                "Load a pack or set language to a supported locale (e.g. 'en').",
+            )
+        ]
+
     out: list[Finding] = []
     for i, t in enumerate(inter.turns):
         if t.speaker != "user" or not t.truth:
@@ -68,6 +73,7 @@ def check_misheard(inter: Interaction) -> list[Finding]:
         if _norm(t.text) == _norm(t.truth):
             continue
 
+        # English digit/word numbers first so default-pack behaviour stays byte-identical.
         heard_nums = set(m.group(0).lower() for m in _NUMERIC.finditer(t.text))
         said_nums = set(m.group(0).lower() for m in _NUMERIC.finditer(t.truth))
         if heard_nums != said_nums:
@@ -80,25 +86,51 @@ def check_misheard(inter: Interaction) -> list[Finding]:
                     i,
                 )
             )
-        else:
+            continue
+
+        # Pack confusable pairs catch non-English (and domain) traps the English numeric list misses.
+        if _confusable_mismatch(t.text, t.truth, pack):
             out.append(
-                Finding("misheard", "medium", f"STT differs from truth: {t.text!r} vs {t.truth!r}", i)
+                Finding(
+                    "misheard_number",
+                    "high",
+                    f"STT confusable mismatch: heard {t.text!r} but caller said {t.truth!r}. "
+                    "A wrong number the agent acts on is the most expensive failure in voice.",
+                    i,
+                )
             )
+            continue
+
+        out.append(
+            Finding("misheard", "medium", f"STT differs from truth: {t.text!r} vs {t.truth!r}", i)
+        )
     return out
 
 
-def check_acted_without_confirming(inter: Interaction) -> list[Finding]:
+def check_acted_without_confirming(
+    inter: Interaction, pack: LocalePack | None = None
+) -> list[Finding]:
     """A consequential action with no confirmation anywhere before it.
 
     In text, a misunderstanding costs one turn. In voice, it costs the refund.
     """
+    if pack is None:
+        return [
+            Finding(
+                "locale_unavailable",
+                "high",
+                f"No locale pack for language {inter.language!r}; confirmation check did not run. "
+                "Load a pack or set language to a supported locale (e.g. 'en').",
+            )
+        ]
+
     out: list[Finding] = []
     for i, t in enumerate(inter.turns):
         consequential = [a for a in t.actions if a.consequential]
         if not consequential:
             continue
         confirmed = any(
-            _CONFIRM.search(p.text) for p in inter.turns[:i] if p.speaker == "agent"
+            pack.confirm_re.search(p.text) for p in inter.turns[:i] if p.speaker == "agent"
         )
         if not confirmed:
             names = ", ".join(a.name for a in consequential)
@@ -202,6 +234,20 @@ def check_incomplete(inter: Interaction) -> list[Finding]:
     return []
 
 
+# Checks that need a locale pack receive it as a second argument from analyse().
+_LOCALE_CHECKS: list[Callable[..., list[Finding]]] = [
+    check_misheard,
+    check_acted_without_confirming,
+]
+_LANGUAGE_AGNOSTIC: list[Callable[[Interaction], list[Finding]]] = [
+    check_policy_violation,
+    check_latency,
+    check_talked_over_user,
+    check_dead_air,
+    check_incomplete,
+]
+
+# Public list kept for callers that introspect the module (order ≈ cost).
 CHECKS = [
     check_misheard,
     check_acted_without_confirming,
@@ -213,13 +259,40 @@ CHECKS = [
 ]
 
 
-def analyse(inter: Interaction) -> list[Finding]:
+def analyse(
+    inter: Interaction,
+    *,
+    packs: dict[str, LocalePack] | None = None,
+    locale_pack: LocalePack | None = None,
+) -> list[Finding]:
+    """Run all checks.
+
+    ``locale_pack`` forces a single pack. Otherwise the pack is resolved from
+    ``inter.language`` against ``packs`` (default: shipped builtins).
+    """
+    available = packs if packs is not None else load_builtin_packs()
+    pack = resolve_pack(inter.language, packs=available, pack=locale_pack)
+
     out: list[Finding] = []
-    for check in CHECKS:
+    for check in _LOCALE_CHECKS:
+        out.extend(check(inter, pack))
+    for check in _LANGUAGE_AGNOSTIC:
         out.extend(check(inter))
     order = {"high": 0, "medium": 1, "low": 2}
     out.sort(key=lambda f: (order.get(f.severity, 9), f.turn_index if f.turn_index is not None else -1))
     return out
+
+
+def _confusable_mismatch(heard: str, truth: str, pack: LocalePack) -> bool:
+    """True when a confusable pair is split across heard vs truth."""
+    for a_re, b_re in pack.confusable_res:
+        a_in_heard, b_in_heard = bool(a_re.search(heard)), bool(b_re.search(heard))
+        a_in_truth, b_in_truth = bool(a_re.search(truth)), bool(b_re.search(truth))
+        if (a_in_heard and b_in_truth and not b_in_heard) or (
+            b_in_heard and a_in_truth and not a_in_heard
+        ):
+            return True
+    return False
 
 
 def _norm(s: str) -> str:
