@@ -32,8 +32,10 @@ class Finding:
     turn_index: int | None = None
 
 
-# Numbers that STT reliably confuses. The -teen/-ty pairs are the classic: one unstressed syllable
+# Tokens STT reliably confuses. The -teen/-ty pairs are the classic: one unstressed syllable
 # apart, and both are plausible amounts, so neither the model nor a human reviewer notices.
+# Digit-level and letter pairs are the ones that wreck account numbers, card readbacks, and
+# reference codes on a phone line (issue #4).
 _CONFUSABLE = [
     (r"\bfifteen\b", r"\bfifty\b"),
     (r"\bsixteen\b", r"\bsixty\b"),
@@ -42,17 +44,50 @@ _CONFUSABLE = [
     (r"\bnineteen\b", r"\bninety\b"),
     (r"\bthirteen\b", r"\bthirty\b"),
     (r"\bfourteen\b", r"\bforty\b"),
+    # "oh" vs "zero": both are how people read "0" on a card or account number.
+    (r"\boh\b", r"\bzero\b"),
+    # "a" vs "eight": same one-phoneme trap as fifteen/fifty, common in spoken digits.
+    (r"\ba\b", r"\beight\b"),
+    # "to"/"too" vs "two": amount or quantity after a verb collapses into a preposition.
+    (r"\bto\b", r"\btwo\b"),
+    (r"\btoo\b", r"\btwo\b"),
+    # Repeated digits spoken as "double N" vs "N N" / "seventy seven" style.
+    (r"\bdouble seven\b", r"\bseventy seven\b"),
+    (r"\bdouble seven\b", r"\bseven seven\b"),
+    (r"\bdouble four\b", r"\bfour four\b"),
+    # Narrowband phone-line letter confusions in reference codes / postcodes.
+    (r"\bb\b", r"\bd\b"),
+    (r"\bb\b", r"\bp\b"),
+    (r"\bd\b", r"\bt\b"),
+    (r"\be\b", r"\bp\b"),
+    (r"\bt\b", r"\bv\b"),
+    (r"\bv\b", r"\bz\b"),
 ]
 
-_NUMERIC = re.compile(r"\b\d+(?:\.\d+)?\b|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|"
-                      r"eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|"
-                      r"twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand)\b", re.I)
+_NUMERIC = re.compile(
+    r"\b\d+(?:\.\d+)?\b|\b(?:zero|oh|one|two|three|four|five|six|seven|eight|nine|ten|"
+    r"eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|"
+    r"twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand)\b",
+    re.I,
+)
 
 _CONFIRM = re.compile(
     r"\b(?:just to confirm|confirm|did you say|is that right|correct\?|to be clear|"
     r"you'?d like|shall I|should I|can I go ahead)\b",
     re.I,
 )
+
+
+def _confusable_swap(heard: str, said: str) -> bool:
+    """True when a known confusable pair is swapped between STT text and ground truth."""
+    h, s = heard.lower(), said.lower()
+    for left, right in _CONFUSABLE:
+        h_l, h_r = re.search(left, h) is not None, re.search(right, h) is not None
+        s_l, s_r = re.search(left, s) is not None, re.search(right, s) is not None
+        # Classic swap: truth has one form, STT has the other (and not both forms on both sides).
+        if (s_l and h_r and not s_r and not h_l) or (s_r and h_l and not s_l and not h_r):
+            return True
+    return False
 
 
 def check_misheard(inter: Interaction) -> list[Finding]:
@@ -70,7 +105,7 @@ def check_misheard(inter: Interaction) -> list[Finding]:
 
         heard_nums = set(m.group(0).lower() for m in _NUMERIC.finditer(t.text))
         said_nums = set(m.group(0).lower() for m in _NUMERIC.finditer(t.truth))
-        if heard_nums != said_nums:
+        if heard_nums != said_nums or _confusable_swap(t.text, t.truth):
             out.append(
                 Finding(
                     "misheard_number",

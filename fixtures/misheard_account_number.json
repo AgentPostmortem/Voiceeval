@@ -1,0 +1,33 @@
+{
+  "id": "lookup-misheard-account-oh-zero",
+  "policy": {"max_refund": 50},
+  "completed": true,
+  "turns": [
+    {
+      "speaker": "agent",
+      "text": "Hi, can I have your account number?",
+      "start_s": 0.0,
+      "end_s": 1.8
+    },
+    {
+      "speaker": "user",
+      "text": "It is four two oh nine eight.",
+      "truth": "It is four two zero nine eight.",
+      "start_s": 2.2,
+      "end_s": 5.0
+    },
+    {
+      "speaker": "agent",
+      "text": "Looking up four two oh nine eight now.",
+      "start_s": 5.4,
+      "end_s": 7.5,
+      "actions": [
+        {
+          "name": "lookup_account",
+          "args": {"account": "42098"},
+          "consequential": true
+        }
+      ]
+    }
+  ]
+}

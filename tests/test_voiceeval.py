@@ -216,3 +216,22 @@ def test_from_dict_roundtrip():
     )
     assert inter.turns[0].speaker == "user"
     assert inter.policy == {}
+
+
+# --------------------------------------------------------------------------- digit-level confusions (issue #4)
+
+
+def test_misheard_account_number_oh_vs_zero_is_caught():
+    """Card/account readbacks: STT heard 'oh' when the caller said 'zero'."""
+    inter = load(FIXTURES / "misheard_account_number.json")
+    findings = analyse(inter)
+    misheard = [f for f in findings if f.check == "misheard_number"]
+    assert misheard, "oh/zero swap on an account number was not caught"
+    assert misheard[0].severity == "high"
+
+
+def test_digit_confusions_do_not_false_positive_on_good_call():
+    """Existing clean fixture must stay clean after expanding confusable pairs."""
+    inter = load(FIXTURES / "good_call.json")
+    assert analyse(inter) == []
+
