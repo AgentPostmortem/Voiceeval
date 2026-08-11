@@ -22,6 +22,59 @@ FAIL refund-misheard-fifty (7s call)
          Took consequential action (refund) without ever confirming.
 ```
 
+## Quickstart
+
+Install, run the smallest useful command, confirm the output.
+
+**From PyPI** ([voiceeval-cli](https://pypi.org/project/voiceeval-cli/)):
+
+```bash
+pip install voiceeval-cli
+```
+
+**From a clone** (dev):
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+Minimal command (uses the shipped fixture; no API keys, no network):
+
+```bash
+voiceeval check fixtures/misheard_call.json
+```
+
+Expected output:
+
+```
+FAIL refund-misheard-fifty (7s call)
+  high   misheard_number turn 1
+         STT heard ['fifty'] but caller said ['fifteen']. A wrong number the
+agent acts on is the most expensive failure in voice.
+  high   no_confirmation turn 2
+         Took consequential action (refund) without ever confirming. If the STT
+misheard, this already happened.
+
+0/1 calls passed
+```
+
+A clean call passes with no findings:
+
+```bash
+voiceeval check fixtures/good_call.json
+```
+
+```
+PASS refund-happy-path (15s call)
+  no findings
+
+1/1 calls passed
+```
+
+The distribution name on PyPI is `voiceeval-cli` (the bare name is taken); the
+import path and the CLI command are both `voiceeval`.
+
 ## The problem
 
 Read that call's transcript and it is flawless. The caller asked for fifty dollars, the agent
@@ -103,24 +156,15 @@ scripted test calls: in production this failure is silent, and no tool can fix t
 
 ## Install
 
-**PyPI:** https://pypi.org/project/voiceeval-cli/
+See [Quickstart](#quickstart) for copy-paste install and first command.
 
-```bash
-pip install voiceeval-cli
-voiceeval check fixtures/*.json
-```
-
-The distribution is `voiceeval-cli` (the bare name is taken on PyPI by an unrelated
-project); the import path and the command are both `voiceeval`.
-
-From a clone, for development:
+Only dependency is `rich`. `[stt]` adds `groq` if you are starting from audio.
+Development extras:
 
 ```bash
 pip install -e ".[dev]"
 pytest -q                                  # 18 tests
 ```
-
-Only dependency is `rich`. `[stt]` adds `groq` if you are starting from audio.
 
 ## Design notes
 
