@@ -174,6 +174,45 @@ def test_misheard_without_ground_truth_is_undetectable():
     assert "misheard_number" not in _codes(inter)
 
 
+
+
+def test_non_numeric_stt_mismatch_is_medium_misheard_not_number():
+    """STT can mangle wording without touching amounts.
+
+    When ground truth differs but the *numbers* still match, the expensive
+    misheard_number path must not fire — the code has a separate medium
+    `misheard` finding for that case. That branch was untested.
+    """
+    inter = Interaction(
+        id="t",
+        turns=[
+            _t(
+                "user",
+                "refund fifteen dollars for the shirt please",
+                0,
+                2,
+                truth="refund fifteen dollars for the shoes please",
+            ),
+            _t("agent", "Just to confirm, fifteen dollars?", 2.2, 4.0),
+            _t("user", "yes", 4.2, 4.6, truth="yes"),
+            _t(
+                "agent",
+                "Done.",
+                4.8,
+                5.4,
+                actions=[Action("refund", {"amount": 15}, True)],
+            ),
+        ],
+        policy={"max_refund": 50},
+    )
+    findings = analyse(inter)
+    codes = {f.check for f in findings}
+    assert "misheard_number" not in codes
+    misheard = [f for f in findings if f.check == "misheard"]
+    assert len(misheard) == 1
+    assert misheard[0].severity == "medium"
+    assert misheard[0].turn_index == 0
+
 # --------------------------------------------------------------------------- regression diff
 
 
