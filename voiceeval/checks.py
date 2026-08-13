@@ -42,6 +42,41 @@ _CONFUSABLE = [
     (r"\bnineteen\b", r"\bninety\b"),
     (r"\bthirteen\b", r"\bthirty\b"),
     (r"\bfourteen\b", r"\bforty\b"),
+    # Card / account readback: unstressed "oh" and "zero" are the same vowel.
+    (r"\boh\b", r"\bzero\b"),
+    # Same one-phoneme collapse as fifteen/fifty.
+    (r"\ba\b", r"\beight\b"),
+    # Amounts and quantities: "to"/"too" vs "two".
+    (r"\bto\b", r"\btwo\b"),
+    (r"\btoo\b", r"\btwo\b"),
+    # How people read repeated digits aloud vs the -ty form.
+    (r"\bdouble\s+one\b", r"\btwenty[\s-]+one\b"),
+    (r"\bdouble\s+two\b", r"\btwenty[\s-]+two\b"),
+    (r"\bdouble\s+three\b", r"\bthirty[\s-]+three\b"),
+    (r"\bdouble\s+four\b", r"\bforty[\s-]+four\b"),
+    (r"\bdouble\s+five\b", r"\bfifty[\s-]+five\b"),
+    (r"\bdouble\s+six\b", r"\bsixty[\s-]+six\b"),
+    (r"\bdouble\s+seven\b", r"\bseventy[\s-]+seven\b"),
+    (r"\bdouble\s+eight\b", r"\beighty[\s-]+eight\b"),
+    (r"\bdouble\s+nine\b", r"\bninety[\s-]+nine\b"),
+    # Narrowband telephony: these letters collapse on a phone line and show
+    # up in reference codes and postcodes.
+    (r"\bb\b", r"\bd\b"),
+    (r"\bb\b", r"\be\b"),
+    (r"\bb\b", r"\bp\b"),
+    (r"\bb\b", r"\bt\b"),
+    (r"\bb\b", r"\bv\b"),
+    (r"\bb\b", r"\bz\b"),
+    (r"\bd\b", r"\be\b"),
+    (r"\bd\b", r"\bt\b"),
+    (r"\be\b", r"\bp\b"),
+    (r"\be\b", r"\bt\b"),
+    (r"\be\b", r"\bv\b"),
+    (r"\bp\b", r"\bt\b"),
+    (r"\bp\b", r"\bv\b"),
+    (r"\bt\b", r"\bv\b"),
+    (r"\bt\b", r"\bz\b"),
+    (r"\bv\b", r"\bz\b"),
 ]
 
 _NUMERIC = re.compile(r"\b\d+(?:\.\d+)?\b|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|"
@@ -70,13 +105,18 @@ def check_misheard(inter: Interaction) -> list[Finding]:
 
         heard_nums = set(m.group(0).lower() for m in _NUMERIC.finditer(t.text))
         said_nums = set(m.group(0).lower() for m in _NUMERIC.finditer(t.truth))
-        if heard_nums != said_nums:
+        pair = _confusable_hit(t.text, t.truth)
+        if heard_nums != said_nums or pair:
+            detail = (
+                f"STT heard {sorted(heard_nums) or '[]'} but caller said {sorted(said_nums) or '[]'}."
+                if heard_nums != said_nums
+                else f"STT swapped a high-cost pair ({pair}): {t.text!r} vs {t.truth!r}."
+            )
             out.append(
                 Finding(
                     "misheard_number",
                     "high",
-                    f"STT heard {sorted(heard_nums) or '[]'} but caller said {sorted(said_nums) or '[]'}. "
-                    "A wrong number the agent acts on is the most expensive failure in voice.",
+                    f"{detail} A wrong number the agent acts on is the most expensive failure in voice.",
                     i,
                 )
             )
@@ -224,3 +264,15 @@ def analyse(inter: Interaction) -> list[Finding]:
 
 def _norm(s: str) -> str:
     return re.sub(r"[^a-z0-9 ]", "", s.lower()).strip()
+
+
+def _confusable_hit(text: str, truth: str) -> str | None:
+    """Return a label if truth and STT differ by a known acoustic pair."""
+    for left, right in _CONFUSABLE:
+        left_in_text = re.search(left, text, re.I)
+        right_in_truth = re.search(right, truth, re.I)
+        right_in_text = re.search(right, text, re.I)
+        left_in_truth = re.search(left, truth, re.I)
+        if (left_in_text and right_in_truth) or (right_in_text and left_in_truth):
+            return f"{left} ↔ {right}"
+    return None
