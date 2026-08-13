@@ -50,6 +50,15 @@ def test_misheard_call_fails_the_suite():
     assert score(inter).passed is False
 
 
+def test_digit_confusions_on_an_account_number_are_high_severity():
+    """oh/zero, a/eight, double-seven/seventy-seven on a card-style readback."""
+    inter = load(FIXTURES / "misheard_account.json")
+    findings = analyse(inter)
+    misheard = [f for f in findings if f.check == "misheard_number"]
+    assert misheard, "digit-level account confusion was not caught"
+    assert misheard[0].severity == "high"
+
+
 def test_a_clean_call_passes_with_no_findings():
     """Guards against the checker crying wolf. The good call confirms before refunding, replies
     promptly, and the STT matches ground truth."""
