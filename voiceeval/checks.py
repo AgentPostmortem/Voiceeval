@@ -21,6 +21,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from .locales import LocalePack, load_builtin_packs
 from .turns import Interaction, Turn
 
 
@@ -32,30 +33,31 @@ class Finding:
     turn_index: int | None = None
 
 
-# Numbers that STT reliably confuses. The -teen/-ty pairs are the classic: one unstressed syllable
-# apart, and both are plausible amounts, so neither the model nor a human reviewer notices.
-_CONFUSABLE = [
-    (r"\bfifteen\b", r"\bfifty\b"),
-    (r"\bsixteen\b", r"\bsixty\b"),
-    (r"\bseventeen\b", r"\bseventy\b"),
-    (r"\beighteen\b", r"\beighty\b"),
-    (r"\bnineteen\b", r"\bninety\b"),
-    (r"\bthirteen\b", r"\bthirty\b"),
-    (r"\bfourteen\b", r"\bforty\b"),
-]
+# English default, kept as the built-in pack so existing callers stay identical.
+# Override via locale packs (see locales.py) — a missing pack is not a pass.
+_DEFAULT_PACKS = load_builtin_packs()
+_CONFUSABLE = list(_DEFAULT_PACKS["en"].confusable_pairs)
 
 _NUMERIC = re.compile(r"\b\d+(?:\.\d+)?\b|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|"
                       r"eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|"
                       r"twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand)\b", re.I)
 
-_CONFIRM = re.compile(
-    r"\b(?:just to confirm|confirm|did you say|is that right|correct\?|to be clear|"
-    r"you'?d like|shall I|should I|can I go ahead)\b",
-    re.I,
-)
+_CONFIRM = _DEFAULT_PACKS["en"].confirm_re
 
 
-def check_misheard(inter: Interaction) -> list[Finding]:
+def _resolve_pack(
+    inter: Interaction,
+    *,
+    packs: dict[str, LocalePack] | None = None,
+    locale_pack: LocalePack | None = None,
+) -> LocalePack | None:
+    if locale_pack is not None:
+        return locale_pack
+    table = packs if packs is not None else _DEFAULT_PACKS
+    return table.get(inter.language)
+
+
+def check_misheard(inter: Interaction, pack: LocalePack | None = None) -> list[Finding]:
     """STT heard something different from what was said.
 
     Only detectable when you have ground truth, which is exactly why scripted test calls are worth
@@ -70,7 +72,15 @@ def check_misheard(inter: Interaction) -> list[Finding]:
 
         heard_nums = set(m.group(0).lower() for m in _NUMERIC.finditer(t.text))
         said_nums = set(m.group(0).lower() for m in _NUMERIC.finditer(t.truth))
-        if heard_nums != said_nums:
+        pair = False
+        if pack is not None:
+            for left, right in pack.confusable_pairs:
+                if (re.search(left, t.text, re.I) and re.search(right, t.truth, re.I)) or (
+                    re.search(right, t.text, re.I) and re.search(left, t.truth, re.I)
+                ):
+                    pair = True
+                    break
+        if heard_nums != said_nums or pair:
             out.append(
                 Finding(
                     "misheard_number",
@@ -87,7 +97,7 @@ def check_misheard(inter: Interaction) -> list[Finding]:
     return out
 
 
-def check_acted_without_confirming(inter: Interaction) -> list[Finding]:
+def check_acted_without_confirming(inter: Interaction, pack: LocalePack | None = None) -> list[Finding]:
     """A consequential action with no confirmation anywhere before it.
 
     In text, a misunderstanding costs one turn. In voice, it costs the refund.
@@ -97,8 +107,9 @@ def check_acted_without_confirming(inter: Interaction) -> list[Finding]:
         consequential = [a for a in t.actions if a.consequential]
         if not consequential:
             continue
+        confirm_re = pack.confirm_re if pack is not None else _CONFIRM
         confirmed = any(
-            _CONFIRM.search(p.text) for p in inter.turns[:i] if p.speaker == "agent"
+            confirm_re.search(p.text) for p in inter.turns[:i] if p.speaker == "agent"
         )
         if not confirmed:
             names = ", ".join(a.name for a in consequential)
@@ -213,10 +224,28 @@ CHECKS = [
 ]
 
 
-def analyse(inter: Interaction) -> list[Finding]:
+def analyse(
+    inter: Interaction,
+    *,
+    packs: dict[str, LocalePack] | None = None,
+    locale_pack: LocalePack | None = None,
+) -> list[Finding]:
+    pack = _resolve_pack(inter, packs=packs, locale_pack=locale_pack)
+    if pack is None:
+        return [
+            Finding(
+                "locale_unavailable",
+                "high",
+                f"No locale pack for language {inter.language!r}; "
+                "mishearing and confirmation checks did not run.",
+            )
+        ]
     out: list[Finding] = []
     for check in CHECKS:
-        out.extend(check(inter))
+        if check in (check_misheard, check_acted_without_confirming):
+            out.extend(check(inter, pack))
+        else:
+            out.extend(check(inter))
     order = {"high": 0, "medium": 1, "low": 2}
     out.sort(key=lambda f: (order.get(f.severity, 9), f.turn_index if f.turn_index is not None else -1))
     return out

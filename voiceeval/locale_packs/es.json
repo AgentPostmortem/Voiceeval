@@ -1,0 +1,16 @@
+{
+  "language": "es",
+  "confusable_pairs": [
+    ["\\bquince\\b", "\\bcincuenta\\b"],
+    ["\\bdieciséis\\b", "\\bsesenta\\b"],
+    ["\\bdiecisiete\\b", "\\bsetenta\\b"]
+  ],
+  "confirmation_phrases": [
+    "para confirmar",
+    "confirmar",
+    "dijiste",
+    "es correcto",
+    "puedo proceder",
+    "debo proceder"
+  ]
+}

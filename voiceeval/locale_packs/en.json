@@ -1,0 +1,24 @@
+{
+  "language": "en",
+  "confusable_pairs": [
+    ["\\bfifteen\\b", "\\bfifty\\b"],
+    ["\\bsixteen\\b", "\\bsixty\\b"],
+    ["\\bseventeen\\b", "\\bseventy\\b"],
+    ["\\beighteen\\b", "\\beighty\\b"],
+    ["\\bnineteen\\b", "\\bninety\\b"],
+    ["\\bthirteen\\b", "\\bthirty\\b"],
+    ["\\bfourteen\\b", "\\bforty\\b"]
+  ],
+  "confirmation_phrases": [
+    "just to confirm",
+    "confirm",
+    "did you say",
+    "is that right",
+    "correct\\?",
+    "to be clear",
+    "you'?d like",
+    "shall I",
+    "should I",
+    "can I go ahead"
+  ]
+}

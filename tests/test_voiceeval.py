@@ -50,6 +50,41 @@ def test_misheard_call_fails_the_suite():
     assert score(inter).passed is False
 
 
+def test_spanish_locale_pack_catches_quince_cincuenta():
+    inter = load(FIXTURES / "misheard_es.json")
+    findings = analyse(inter)
+    assert any(f.check == "misheard_number" for f in findings)
+    assert "locale_unavailable" not in {f.check for f in findings}
+
+
+def test_missing_locale_pack_is_not_a_silent_pass():
+    inter = load(FIXTURES / "good_call.json")
+    inter.language = "hi"
+    findings = analyse(inter)
+    assert findings and findings[0].check == "locale_unavailable"
+    assert score(inter).passed is False
+
+
+def test_custom_locale_pack_overrides_confirmation():
+    from voiceeval.locales import LocalePack
+
+    pack = LocalePack(
+        language="en",
+        confusable_pairs=( (r"\bfifteen\b", r"\bfifty\b"), ),
+        confirmation_phrases=("please double-check",),
+    )
+    inter = Interaction(
+        id="custom",
+        turns=[
+            _t("user", "refund fifteen", 0, 1, truth="refund fifteen"),
+            _t("agent", "Just to confirm, fifteen?", 1.2, 2),
+            _t("agent", "Done.", 2.2, 3, actions=[Action("refund", {"amount": 15}, True)]),
+        ],
+    )
+    assert any(f.check == "no_confirmation" for f in analyse(inter, locale_pack=pack))
+    assert "no_confirmation" not in {f.check for f in analyse(inter)}
+
+
 def test_a_clean_call_passes_with_no_findings():
     """Guards against the checker crying wolf. The good call confirms before refunding, replies
     promptly, and the STT matches ground truth."""
