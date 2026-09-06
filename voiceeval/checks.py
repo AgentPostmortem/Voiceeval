@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 
 from .turns import Interaction
 
@@ -125,12 +126,18 @@ def check_policy_violation(inter: Interaction) -> list[Finding]:
     """
     out: list[Finding] = []
     max_refund = inter.policy.get("max_refund")
-    if max_refund is None:
+    normalized_max_refund = _finite_decimal(max_refund)
+    if normalized_max_refund is None:
         return out
     for i, t in enumerate(inter.turns):
         for a in t.actions:
             amount = a.args.get("amount")
-            if a.name == "refund" and isinstance(amount, (int, float)) and amount > max_refund:
+            normalized_amount = _finite_decimal(amount)
+            if (
+                a.name == "refund"
+                and normalized_amount is not None
+                and normalized_amount > normalized_max_refund
+            ):
                 out.append(
                     Finding(
                         "policy_violation",
@@ -141,6 +148,18 @@ def check_policy_violation(inter: Interaction) -> list[Finding]:
                     )
                 )
     return out
+
+
+def _finite_decimal(value: object) -> Decimal | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return None
+    if isinstance(value, str) and not value.strip():
+        return None
+    try:
+        number = Decimal(str(value).strip())
+    except InvalidOperation:
+        return None
+    return number if number.is_finite() else None
 
 
 def check_latency(inter: Interaction, budget_s: float = 1.5) -> list[Finding]:

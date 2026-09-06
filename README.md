@@ -135,3 +135,6 @@ unusable, so only `consequential` actions require it.
 
 **Policy comes from the interaction, not this library.** What is allowed is a business decision.
 Whether the agent respected it is the test.
+
+Refund limits compare finite JSON numbers and numeric strings. Booleans, empty strings, malformed
+amounts, and non-finite values are treated as missing amounts rather than valid refunds.
