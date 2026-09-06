@@ -20,7 +20,9 @@ def _codes(inter: Interaction) -> set[str]:
 
 
 def _t(speaker, text, start, end, truth=None, actions=None) -> Turn:
-    return Turn(speaker=speaker, text=text, start_s=start, end_s=end, truth=truth, actions=actions or [])
+    return Turn(
+        speaker=speaker, text=text, start_s=start, end_s=end, truth=truth, actions=actions or []
+    )
 
 
 # --------------------------------------------------------------------------- the headline case
@@ -112,7 +114,9 @@ def test_slow_response_is_caught():
         ],
     )
     findings = [f for f in analyse(inter) if f.check == "slow_response"]
-    assert findings and findings[0].severity == "high", "4s gap should be high, it is 2x+ the budget"
+    assert (
+        findings and findings[0].severity == "high"
+    ), "4s gap should be high, it is 2x+ the budget"
 
 
 def test_prompt_response_is_not_flagged():
@@ -120,6 +124,24 @@ def test_prompt_response_is_not_flagged():
         id="t", turns=[_t("user", "hello", 0, 1, truth="hello"), _t("agent", "Hi.", 1.3, 2.0)]
     )
     assert "slow_response" not in _codes(inter)
+
+
+def test_out_of_order_response_timing_is_caught():
+    """Corrupt clocks must fail loudly instead of looking like a fast response."""
+    inter = Interaction(
+        id="t",
+        turns=[
+            _t("user", "hello", 0, 2, truth="hello"),
+            _t("agent", "Hi.", 1.5, 2.0),
+        ],
+    )
+
+    findings = [f for f in analyse(inter) if f.check == "invalid_timing"]
+
+    assert len(findings) == 1
+    assert findings[0].severity == "high"
+    assert findings[0].turn_index == 1
+    assert "0.5s before" in findings[0].message
 
 
 def test_talking_over_user_is_caught():
@@ -174,8 +196,6 @@ def test_misheard_without_ground_truth_is_undetectable():
     assert "misheard_number" not in _codes(inter)
 
 
-
-
 def test_non_numeric_stt_mismatch_is_medium_misheard_not_number():
     """STT can mangle wording without touching amounts.
 
@@ -212,6 +232,7 @@ def test_non_numeric_stt_mismatch_is_medium_misheard_not_number():
     assert len(misheard) == 1
     assert misheard[0].severity == "medium"
     assert misheard[0].turn_index == 0
+
 
 # --------------------------------------------------------------------------- regression diff
 
