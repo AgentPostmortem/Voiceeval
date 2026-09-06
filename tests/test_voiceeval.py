@@ -102,6 +102,41 @@ def test_policy_violation_is_caught():
     assert "policy_violation" in _codes(inter)
 
 
+def test_policy_violation_is_caught_for_json_string_amount():
+    inter = Interaction(
+        id="t",
+        turns=[
+            _t(
+                "agent",
+                "Done.",
+                0,
+                1,
+                actions=[Action("refund", {"amount": " 200.50 "}, True)],
+            ),
+        ],
+        policy={"max_refund": 50},
+    )
+    assert "policy_violation" in _codes(inter)
+
+
+def test_policy_violation_ignores_non_numeric_json_amounts():
+    for amount in (True, "", "not-a-number", "NaN", "Infinity", None):
+        inter = Interaction(
+            id="t",
+            turns=[
+                _t(
+                    "agent",
+                    "Done.",
+                    0,
+                    1,
+                    actions=[Action("refund", {"amount": amount}, True)],
+                ),
+            ],
+            policy={"max_refund": 0},
+        )
+        assert "policy_violation" not in _codes(inter), repr(amount)
+
+
 def test_slow_response_is_caught():
     """Invisible in a transcript. A four-second silence is a failed call."""
     inter = Interaction(
