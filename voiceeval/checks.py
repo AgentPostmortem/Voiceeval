@@ -21,7 +21,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from .turns import Interaction, Turn
+from .turns import Interaction
 
 
 @dataclass
@@ -157,6 +157,16 @@ def check_latency(inter: Interaction, budget_s: float = 1.5) -> list[Finding]:
                     "slow_response",
                     sev,
                     f"{gap:.1f}s of silence before the agent replied (budget {budget_s}s).",
+                    idx,
+                )
+            )
+        elif gap < -0.3:
+            idx = inter.turns.index(agent_turn)
+            out.append(
+                Finding(
+                    "invalid_timing",
+                    "high",
+                    f"Agent turn started {-gap:.1f}s before user turn ended.",
                     idx,
                 )
             )

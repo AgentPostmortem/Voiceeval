@@ -122,6 +122,52 @@ def test_prompt_response_is_not_flagged():
     assert "slow_response" not in _codes(inter)
 
 
+def test_negative_latency_out_of_order_clocks_produce_invalid_timing_finding():
+    """Negative gap (agent starting before caller finishes beyond normal overlap) must be flagged."""
+    inter = Interaction(
+        id="t",
+        turns=[
+            _t("user", "hello", 0, 2.0, truth="hello"),
+            _t("agent", "Hi there.", 0.5, 2.5),
+        ],
+    )
+    findings = [f for f in analyse(inter) if f.check == "invalid_timing"]
+    assert len(findings) == 1
+    assert findings[0].severity == "high"
+    assert findings[0].turn_index == 1
+
+
+def test_out_of_order_turn_timestamps_flagged_as_invalid_timing():
+    """Corrupt fixture where clocks jump backwards (agent turn starts before user turn started)."""
+    inter = Interaction(
+        id="t",
+        turns=[
+            _t("user", "hello", 10.0, 12.0, truth="hello"),
+            _t("agent", "Hi there.", 5.0, 7.0),
+        ],
+    )
+    findings = [f for f in analyse(inter) if f.check == "invalid_timing"]
+    assert len(findings) == 1
+    assert findings[0].severity == "high"
+    assert findings[0].turn_index == 1
+    assert "7.0s before user turn ended" in findings[0].message
+
+
+
+def test_small_conversational_overlap_in_response_is_not_flagged():
+    """A ~200ms overlap when the agent starts replying is normal turn-taking, not a fault."""
+    inter = Interaction(
+        id="t",
+        turns=[
+            _t("user", "hello", 0, 2.0, truth="hello"),
+            _t("agent", "Hi there.", 1.8, 3.0),
+        ],
+    )
+    assert "invalid_timing" not in _codes(inter)
+    assert "slow_response" not in _codes(inter)
+
+
+
 def test_talking_over_user_is_caught():
     inter = Interaction(
         id="t",
