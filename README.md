@@ -95,7 +95,7 @@ scripted test calls: in production this failure is silent, and no tool can fix t
 
 ## Honest scope
 
-- **The eval logic is the project, and it is fully tested** (18 tests, no keys, no network).
+- **The eval logic is the project, and it is fully tested** (20 tests, no keys, no network).
 - **The STT adapter is not exercised by the tests.** `GroqSTT` (whisper-large-v3, free tier) needs
   an API key and a network, and what is worth testing here is the evaluation, not whether Groq's
   SDK works. If your platform already gives you a timed transcript, you never need it.
@@ -117,7 +117,7 @@ From a clone, for development:
 
 ```bash
 pip install -e ".[dev]"
-pytest -q                                  # 18 tests
+pytest -q                                  # 20 tests
 ```
 
 Only dependency is `rich`. `[stt]` adds `groq` if you are starting from audio.

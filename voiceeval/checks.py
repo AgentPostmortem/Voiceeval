@@ -21,7 +21,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from .turns import Interaction, Turn
+from .turns import Interaction
 
 
 @dataclass
@@ -44,9 +44,12 @@ _CONFUSABLE = [
     (r"\bfourteen\b", r"\bforty\b"),
 ]
 
-_NUMERIC = re.compile(r"\b\d+(?:\.\d+)?\b|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|"
-                      r"eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|"
-                      r"twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand)\b", re.I)
+_NUMERIC = re.compile(
+    r"\b\d+(?:\.\d+)?\b|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|"
+    r"eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|"
+    r"twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand)\b",
+    re.I,
+)
 
 _CONFIRM = re.compile(
     r"\b(?:just to confirm|confirm|did you say|is that right|correct\?|to be clear|"
@@ -82,7 +85,9 @@ def check_misheard(inter: Interaction) -> list[Finding]:
             )
         else:
             out.append(
-                Finding("misheard", "medium", f"STT differs from truth: {t.text!r} vs {t.truth!r}", i)
+                Finding(
+                    "misheard", "medium", f"STT differs from truth: {t.text!r} vs {t.truth!r}", i
+                )
             )
     return out
 
@@ -97,9 +102,7 @@ def check_acted_without_confirming(inter: Interaction) -> list[Finding]:
         consequential = [a for a in t.actions if a.consequential]
         if not consequential:
             continue
-        confirmed = any(
-            _CONFIRM.search(p.text) for p in inter.turns[:i] if p.speaker == "agent"
-        )
+        confirmed = any(_CONFIRM.search(p.text) for p in inter.turns[:i] if p.speaker == "agent")
         if not confirmed:
             names = ", ".join(a.name for a in consequential)
             out.append(
@@ -149,6 +152,17 @@ def check_latency(inter: Interaction, budget_s: float = 1.5) -> list[Finding]:
     out: list[Finding] = []
     for user_turn, agent_turn in inter.pairs():
         gap = agent_turn.start_s - user_turn.end_s
+        if gap < 0:
+            idx = inter.turns.index(agent_turn)
+            out.append(
+                Finding(
+                    "invalid_timing",
+                    "high",
+                    f"Agent started {abs(gap):.1f}s before the caller finished; timestamps overlap.",
+                    idx,
+                )
+            )
+            continue
         if gap > budget_s:
             idx = inter.turns.index(agent_turn)
             sev = "high" if gap > budget_s * 2 else "medium"
@@ -218,7 +232,9 @@ def analyse(inter: Interaction) -> list[Finding]:
     for check in CHECKS:
         out.extend(check(inter))
     order = {"high": 0, "medium": 1, "low": 2}
-    out.sort(key=lambda f: (order.get(f.severity, 9), f.turn_index if f.turn_index is not None else -1))
+    out.sort(
+        key=lambda f: (order.get(f.severity, 9), f.turn_index if f.turn_index is not None else -1)
+    )
     return out
 
 
