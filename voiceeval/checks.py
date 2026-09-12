@@ -21,6 +21,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
+from itertools import pairwise
 
 from .turns import Interaction
 
@@ -53,7 +54,7 @@ _NUMERIC = re.compile(
 )
 
 _CONFIRM = re.compile(
-    r"\b(?:just to confirm|confirm|did you say|is that right|correct\?|to be clear|"
+    r"\b(?:just to confirm|confirm(?:ing)?|did you say|is that right|correct(?=\?)|to be clear|"
     r"you'?d like|shall I|should I|can I go ahead)\b",
     re.I,
 )
@@ -162,6 +163,128 @@ def _finite_decimal(value: object) -> Decimal | None:
     return number if number.is_finite() else None
 
 
+_WORD_TO_NUMBER = {
+    "one": "1",
+    "two": "2",
+    "three": "3",
+    "four": "4",
+    "five": "5",
+    "six": "6",
+    "seven": "7",
+    "eight": "8",
+    "nine": "9",
+    "ten": "10",
+    "eleven": "11",
+    "twelve": "12",
+    "thirteen": "13",
+    "fourteen": "14",
+    "fifteen": "15",
+    "sixteen": "16",
+    "seventeen": "17",
+    "eighteen": "18",
+    "nineteen": "19",
+    "twenty": "20",
+    "thirty": "30",
+    "forty": "40",
+    "fifty": "50",
+    "sixty": "60",
+    "seventy": "70",
+    "eighty": "80",
+    "ninety": "90",
+    "hundred": "100",
+    "thousand": "1000",
+}
+
+
+def _numeral_values(text: str) -> set[Decimal] | None:
+    """Normalize isolated English number words and unsigned decimal digits.
+
+    Skip compound/signed/grouped forms rather than splitting, for example, "twenty five"
+    into two unrelated amounts. This is deliberately not a general number-language parser.
+    """
+    matches = list(_NUMERIC.finditer(text))
+    for previous, current in pairwise(matches):
+        if re.fullmatch(
+            r"[\s,.-]*(?:and\s+)?", text[previous.end() : current.start()], re.IGNORECASE
+        ):
+            return None
+    if any(m.start() and text[m.start() - 1] in "+-" for m in matches):
+        return None
+    return {Decimal(_WORD_TO_NUMBER.get(m.group().lower(), m.group())) for m in matches}
+
+
+def _confirmation_action_amounts(inter: Interaction, index: int) -> set[Decimal]:
+    """Use only the first consequential action turn in this confirmation exchange."""
+    for j in range(index, len(inter.turns)):
+        turn = inter.turns[j]
+        if turn.speaker == "user":
+            # A new request or correction invalidates the association; an acknowledgement
+            # can sit between confirmation and action in the usual refund call shape.
+            if not re.fullmatch(
+                r"(?:yes|yeah|yep|ok|okay|correct|right)[.!\s]*", turn.text, re.IGNORECASE
+            ):
+                break
+        elif j != index and _CONFIRM.search(turn.text):
+            break
+        actions = [a for a in turn.actions if a.consequential]
+        if actions:
+            return {
+                amount
+                for action in actions
+                for amount in [_finite_decimal(action.args.get("amount"))]
+                if amount is not None
+            }
+    return set()
+
+
+def check_confirmed_wrong_value(inter: Interaction) -> list[Finding]:
+    """Flag an agent confirmation echoing a current STT value contradicted by evidence.
+
+    Ground truth can expose a wrong confirmation immediately, even before a caller agrees
+    or an action occurs. Without truth, a single confirmed value can still contradict the
+    next action amount. Neither path infers whether the caller actually accepted the number.
+    """
+    out: list[Finding] = []
+    for i, user_turn in enumerate(inter.turns):
+        if user_turn.speaker != "user":
+            continue
+        heard = _numeral_values(user_turn.text)
+        said = _numeral_values(user_turn.truth) if user_turn.truth else set()
+        if not heard or said is None:
+            continue
+
+        for j in range(i + 1, len(inter.turns)):
+            agent_turn = inter.turns[j]
+            if agent_turn.speaker == "user":
+                break
+            if not _CONFIRM.search(agent_turn.text):
+                continue
+            confirmed = _numeral_values(agent_turn.text)
+            if not confirmed:
+                continue
+            echoed = confirmed & heard
+            wrong = echoed - said if user_turn.truth else set()
+            message = None
+            if wrong:
+                message = (
+                    f"Confirmation echoed STT value(s) {sorted(map(str, wrong))} absent from "
+                    f"caller truth {sorted(map(str, said))}. "
+                    "Caller agreement does not make the number right."
+                )
+            elif echoed and len(confirmed) == len(heard) == 1:
+                amounts = _confirmation_action_amounts(inter, j)
+                # Multiple numbers cannot be assigned to an amount without field semantics.
+                if len(amounts) == 1 and confirmed != amounts:
+                    message = (
+                        f"Confirmation echoed STT {sorted(map(str, echoed))} but the next "
+                        f"consequential action amount was {sorted(map(str, amounts))}."
+                    )
+            if message:
+                out.append(Finding("confirmed_wrong_value", "high", message, j))
+                break
+    return out
+
+
 def check_latency(inter: Interaction, budget_s: float = 1.5) -> list[Finding]:
     """Silence between the caller finishing and the agent starting.
 
@@ -237,6 +360,7 @@ def check_incomplete(inter: Interaction) -> list[Finding]:
 
 CHECKS = [
     check_misheard,
+    check_confirmed_wrong_value,
     check_acted_without_confirming,
     check_policy_violation,
     check_latency,

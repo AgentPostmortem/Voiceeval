@@ -44,12 +44,27 @@ Each of these is invisible in a text eval:
 | Check | Why it costs money |
 |---|---|
 | `misheard_number` | "Fifteen" and "fifty" are one unstressed syllable apart. The agent acts on either with equal confidence. **The expensive one.** |
+| `confirmed_wrong_value` | The agent confirms a misheard number, even if the caller agrees. |
 | `no_confirmation` | In text, a misunderstanding costs one turn. In voice, it costs the refund. |
 | `policy_violation` | The agent exceeded a limit. Policy belongs in code, not the prompt. |
 | `slow_response` | Three seconds of silence is a failed call, however good the answer. |
 | `talked_over_user` | Barge-in handling is most of what makes an agent feel human or broken. |
 | `dead_air` | Where callers hang up. |
 | `incomplete` | The call ended without reaching its goal. |
+
+`confirmed_wrong_value` associates confirmations with the preceding caller turn, stopping
+at the next caller turn. It compares unsigned decimal digits and isolated English number
+words (one through nineteen, tens through ninety, hundred, thousand), normalizing forms
+such as `fifty` and `50.00`. Compound phrases (`twenty five`, `two hundred`), signed and
+grouped numbers are skipped by this check. It does not map numbers to semantic fields,
+track numeric order/repetition, or understand other languages or arbitrary confirmation
+phrasing. A matching number elsewhere in truth can therefore hide a mismatch.
+
+Ground truth exposes a wrong confirmation without requiring caller agreement or an action.
+When one confirmed STT value differs from the next consequential action's single numeric
+`amount`, that discrepancy is also reported. That association stops at a new confirmation
+or caller request; short acknowledgements such as `yes` may precede the action.
+Try `voiceeval check fixtures/confirmed_wrong_value_call.json --strict` (expected exit 1).
 
 ## Regression diff
 
@@ -95,7 +110,7 @@ scripted test calls: in production this failure is silent, and no tool can fix t
 
 ## Honest scope
 
-- **The eval logic is the project, and it is fully tested** (20 tests, no keys, no network).
+- **The eval logic is the project, and it is fully tested** (no keys, no network).
 - **The STT adapter is not exercised by the tests.** `GroqSTT` (whisper-large-v3, free tier) needs
   an API key and a network, and what is worth testing here is the evaluation, not whether Groq's
   SDK works. If your platform already gives you a timed transcript, you never need it.
@@ -117,7 +132,7 @@ From a clone, for development:
 
 ```bash
 pip install -e ".[dev]"
-pytest -q                                  # 20 tests
+pytest -q
 ```
 
 Only dependency is `rich`. `[stt]` adds `groq` if you are starting from audio.
