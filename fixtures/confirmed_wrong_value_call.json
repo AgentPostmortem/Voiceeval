@@ -1,0 +1,14 @@
+{
+  "id": "refund-confirmed-wrong-fifty",
+  "policy": {"max_refund": 50},
+  "completed": true,
+  "turns": [
+    {"speaker": "agent", "text": "Hi, how can I help?", "start_s": 0.0, "end_s": 1.5},
+    {"speaker": "user", "text": "I need a refund of fifty dollars please.",
+     "truth": "I need a refund of fifteen dollars please.", "start_s": 2.0, "end_s": 5.0},
+    {"speaker": "agent", "text": "Just to confirm, fifty dollars?", "start_s": 5.3, "end_s": 7.0},
+    {"speaker": "user", "text": "yes", "truth": "yes", "start_s": 7.2, "end_s": 7.6},
+    {"speaker": "agent", "text": "Okay, refunding fifty dollars now.", "start_s": 7.9, "end_s": 9.5,
+     "actions": [{"name": "refund", "args": {"amount": 50}, "consequential": true}]}
+  ]
+}
