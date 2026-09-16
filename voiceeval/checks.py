@@ -59,6 +59,10 @@ _CONFIRM = re.compile(
     re.I,
 )
 
+# How many turns back a confirmation still counts for a consequential action. A stale
+# confirmation about an earlier topic must not silence a later action's no_confirmation.
+_CONFIRM_WINDOW = 3
+
 
 def check_misheard(inter: Interaction) -> list[Finding]:
     """STT heard something different from what was said.
@@ -95,7 +99,7 @@ def check_misheard(inter: Interaction) -> list[Finding]:
 
 
 def check_acted_without_confirming(inter: Interaction) -> list[Finding]:
-    """A consequential action with no confirmation anywhere before it.
+    """A consequential action with no confirmation near it.
 
     In text, a misunderstanding costs one turn. In voice, it costs the refund.
     """
@@ -104,7 +108,11 @@ def check_acted_without_confirming(inter: Interaction) -> list[Finding]:
         consequential = [a for a in t.actions if a.consequential]
         if not consequential:
             continue
-        confirmed = any(_CONFIRM.search(p.text) for p in inter.turns[:i] if p.speaker == "agent")
+        confirmed = any(
+            _CONFIRM.search(p.text)
+            for p in inter.turns[max(0, i - _CONFIRM_WINDOW):i]
+            if p.speaker == "agent"
+        )
         if not confirmed:
             names = ", ".join(a.name for a in consequential)
             out.append(
