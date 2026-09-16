@@ -54,7 +54,7 @@ _NUMERIC = re.compile(
 )
 
 _CONFIRM = re.compile(
-    r"\b(?:just to confirm|confirm(?:ing)?|did you say|is that right|correct(?=\?)|to be clear|"
+    r"\b(?:just to confirm|confirm(?:ing|ed)?|did you say|is that right|correct(?=\?)|to be clear|"
     r"you'?d like|shall I|should I|can I go ahead)\b",
     re.I,
 )

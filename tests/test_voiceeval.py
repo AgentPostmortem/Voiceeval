@@ -77,6 +77,21 @@ def test_confirmation_prevents_the_no_confirmation_finding():
     assert "no_confirmation" not in _codes(inter)
 
 
+def test_confirmed_phrasing_suppresses_no_confirmation():
+    """The natural 'Confirmed, ...' reply is a confirmation, not an unconfirmed action."""
+    inter = Interaction(
+        id="t",
+        turns=[
+            _t("user", "refund me twenty dollars", 0, 2, truth="refund me twenty dollars"),
+            _t("user", "yes", 2.2, 4, truth="yes"),
+            _t("agent", "Confirmed, refunding $20.", 4.8, 5.4),
+            _t("agent", "Done.", 5.8, 6.4, actions=[Action("refund", {"amount": 20}, True)]),
+        ],
+        policy={"max_refund": 50},
+    )
+    assert "no_confirmation" not in _codes(inter)
+
+
 def test_non_consequential_action_needs_no_confirmation():
     """A lookup is not a refund. Demanding confirmation for reads would make the agent unusable."""
     inter = Interaction(
