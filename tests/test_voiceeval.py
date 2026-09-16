@@ -104,6 +104,23 @@ def test_non_consequential_action_needs_no_confirmation():
     assert "no_confirmation" not in _codes(inter)
 
 
+def test_stale_unrelated_confirmation_does_not_suppress_no_confirmation():
+    """An early confirmation about a different topic must not silence a later action."""
+    inter = Interaction(
+        id="t",
+        turns=[
+            _t("user", "what is my balance", 0, 2, truth="what is my balance"),
+            _t("agent", "Just to confirm, you want the balance?", 2.2, 4),
+            _t("user", "yes", 4.2, 4.6, truth="yes"),
+            _t("agent", "Your balance is $500.", 4.8, 5.4),
+            _t("user", "refund the $200 order", 6.0, 7.0, truth="refund the $200 order"),
+            _t("agent", "Done.", 8.0, 8.6, actions=[Action("refund", {"amount": 200}, True)]),
+        ],
+        policy={"max_refund": 500},
+    )
+    assert "no_confirmation" in _codes(inter)
+
+
 def test_policy_violation_is_caught():
     """Policy lives in the interaction, not in this library: what is allowed is a business rule."""
     inter = Interaction(
