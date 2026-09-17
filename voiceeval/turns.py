@@ -88,12 +88,35 @@ def load(path: str | Path) -> Interaction:
 
 
 def from_dict(data: dict) -> Interaction:
+    if not isinstance(data, dict):
+        raise ValueError("interaction must be a JSON object with a 'turns' list")
+    raw_turns = data.get("turns")
+    if not isinstance(raw_turns, list):
+        raise ValueError("interaction 'turns' must be a list")
+
+    def turn_field(turn, i, field, *, convert=None):
+        if not isinstance(turn, dict):
+            raise ValueError(f"turn {i} must be an object")
+        if field not in turn:
+            raise ValueError(f"turn {i} missing field '{field}'")
+        value = turn[field]
+        if convert is not None:
+            try:
+                return convert(value)
+            except (TypeError, ValueError):
+                raise ValueError(f"turn {i} field '{field}' must be a number, got {value!r}") from None
+        if field == "speaker" and value not in ("user", "agent"):
+            raise ValueError(f"turn {i} field 'speaker' must be 'user' or 'agent', got {value!r}")
+        if field == "text" and not isinstance(value, str):
+            raise ValueError(f"turn {i} field 'text' must be a string, got {value!r}")
+        return value
+
     turns = [
         Turn(
-            speaker=t["speaker"],
-            text=t["text"],
-            start_s=float(t["start_s"]),
-            end_s=float(t["end_s"]),
+            speaker=turn_field(t, i, "speaker"),
+            text=turn_field(t, i, "text"),
+            start_s=turn_field(t, i, "start_s", convert=float),
+            end_s=turn_field(t, i, "end_s", convert=float),
             truth=t.get("truth"),
             actions=[
                 Action(
@@ -104,7 +127,7 @@ def from_dict(data: dict) -> Interaction:
                 for a in t.get("actions", [])
             ],
         )
-        for t in data["turns"]
+        for i, t in enumerate(raw_turns)
     ]
     return Interaction(
         id=data.get("id", "unnamed"),
