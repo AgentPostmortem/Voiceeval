@@ -1,0 +1,12 @@
+{
+  "id": "account-oh-zero",
+  "policy": {"max_refund": 50},
+  "completed": true,
+  "turns": [
+    {"speaker": "agent", "text": "Can I have the account number?", "start_s": 0.0, "end_s": 1.6},
+    {"speaker": "user", "text": "Account number oh four eight double seven.",
+     "truth": "Account number zero four a seventy seven.", "start_s": 2.0, "end_s": 5.4},
+    {"speaker": "agent", "text": "Pulling up oh four eight double seven now.", "start_s": 5.8, "end_s": 8.0,
+     "actions": [{"name": "lookup_account", "args": {"account": "04877"}, "consequential": true}]}
+  ]
+}
