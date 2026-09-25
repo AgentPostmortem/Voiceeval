@@ -59,6 +59,11 @@ _CONFIRM = re.compile(
     re.I,
 )
 
+_CORRECTION = re.compile(
+    r"\b(?:no|not|actually|i meant|i said|instead of|correction|wrong)\b",
+    re.I,
+)
+
 # How many turns back a confirmation still counts for a consequential action. A stale
 # confirmation about an earlier topic must not silence a later action's no_confirmation.
 _CONFIRM_WINDOW = 3
@@ -293,6 +298,65 @@ def check_confirmed_wrong_value(inter: Interaction) -> list[Finding]:
     return out
 
 
+def check_correction_ignored(inter: Interaction) -> list[Finding]:
+    """Flag an agent using an outdated pre-correction value after the user corrected it."""
+    out: list[Finding] = []
+    
+    for i, user_turn in enumerate(inter.turns):
+        if user_turn.speaker != "user":
+            continue
+        
+        # Check if the user is making a correction
+        if not _CORRECTION.search(user_turn.text):
+            continue
+
+        # Look back to find what the agent previously mentioned or confirmed
+        prior_agent_values: set = set()
+        for k in range(i - 1, -1, -1):
+            if inter.turns[k].speaker == "agent":
+                prior_agent_values = _numeral_values(inter.turns[k].text)
+                if prior_agent_values:
+                    break
+
+        if not prior_agent_values:
+            continue
+
+        user_values = _numeral_values(user_turn.text)
+        if not user_values: 
+            continue
+
+        # If the user stated a new value different from what the agent had
+        new_values = user_values - prior_agent_values
+        if not new_values:
+            continue
+
+
+        # Look forward at subsequent agent turns
+        for j in range(i + 1, len(inter.turns)):
+            agent_turn = inter.turns[j]
+            if agent_turn.speaker != "agent":
+                continue
+
+            agent_values = _numeral_values(agent_turn.text)
+            # Did the agent repeat the outdated value that was corrected?
+            ignored_values = agent_values & prior_agent_values
+            
+            if ignored_values and not (agent_values & new_values):
+                out.append(
+                    Finding(
+                        check="correction_ignored",
+                        severity="high",
+                        message=(
+                            f"Agent repeated outdated value(s) {sorted(map(str, ignored_values))} "
+                            f"after user corrected to {sorted(map(str, new_values))}."
+                        ),
+                        turn_index=j,
+                    )
+                )
+                break  # Don't duplicate findings for the same correction
+
+    return out
+
 def check_latency(inter: Interaction, budget_s: float = 1.5) -> list[Finding]:
     """Silence between the caller finishing and the agent starting.
 
@@ -369,6 +433,7 @@ def check_incomplete(inter: Interaction) -> list[Finding]:
 CHECKS = [
     check_misheard,
     check_confirmed_wrong_value,
+    check_correction_ignored,
     check_acted_without_confirming,
     check_policy_violation,
     check_latency,
